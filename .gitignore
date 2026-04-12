@@ -1,0 +1,41 @@
+# ─── MinIO 运行时文件 ─────────────────────────────────────────────────────────
+bin/
+minio-data/
+
+# ─── 日志与 PID ───────────────────────────────────────────────────────────────
+logs/
+.pids/
+
+# ─── Python 后端 ──────────────────────────────────────────────────────────────
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/graph_compare.db
+backend/.env
+backend/uv.lock
+
+# ─── 测试资源（真实图片不上传）────────────────────────────────────────────────
+backend/tests/real_images/
+backend/tests/algo_output/
+
+# ─── 前端 ─────────────────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# ─── IDE / 工具 ────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+.workbuddy/
+
+# ─── Python 构建产物 ─────────────────────────────────────────────────────────
+backend/*.egg-info/
+backend/dist/
+backend/build/
+
+
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

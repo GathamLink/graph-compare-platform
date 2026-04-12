@@ -1,0 +1,74 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 196 74% 19%;
+    --card: 0 0% 100%;
+    --card-foreground: 196 74% 19%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 196 74% 19%;
+    --primary: 192 91% 36%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 188 94% 53%;
+    --secondary-foreground: 196 74% 19%;
+    --muted: 196 30% 95%;
+    --muted-foreground: 196 20% 50%;
+    --accent: 196 30% 95%;
+    --accent-foreground: 196 74% 19%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 196 20% 88%;
+    --input: 196 20% 88%;
+    --ring: 192 91% 36%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* 图片对比滑块轨道 */
+.compare-slider-track {
+  cursor: ew-resize;
+  user-select: none;
+}
+
+/* 同步缩放图片容器 */
+.zoomable-image {
+  overflow: hidden;
+  position: relative;
+}
+.zoomable-image img {
+  transform-origin: 0 0;
+  transition: transform 0.05s ease-out;
+  will-change: transform;
+}
+
+/* 上传拖拽区激活态 */
+.dropzone-active {
+  @apply border-primary bg-primary/5;
+}
+
+/* 缩略图选中态 */
+.thumb-active {
+  @apply ring-2 ring-primary ring-offset-1;
+}
+
+/* 进度条动画 */
+@keyframes progress-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.progress-pulse { animation: progress-pulse 1.5s ease-in-out infinite; }

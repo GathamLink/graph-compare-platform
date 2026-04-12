@@ -1,0 +1,45 @@
+[project]
+name = "graph-compare-backend"
+version = "0.1.0"
+description = "Graph Compare Platform - FastAPI Backend"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "sqlalchemy>=2.0",
+    "python-multipart>=0.0.9",
+    "aiofiles>=23.0",
+    "Pillow>=10.0",
+    "opencv-python-headless>=4.9",
+    "scikit-image>=0.22",
+    "minio>=7.2",
+    "python-dotenv>=1.0",
+    "pydantic>=2.0",
+    "numpy>=1.26",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# 后端代码直接平铺在 backend/ 下，不作为可安装包，跳过打包
+py-modules = []
+packages = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",           # TestClient 依赖
+]
+
+[tool.pytest.ini_options]
+testpaths    = ["tests"]
+asyncio_mode = "auto"
+
+# 使用腾讯云 PyPI 镜像加速国内依赖下载
+# uv add / uv sync 均自动使用此镜像
+[[tool.uv.index]]
+url = "https://mirrors.tencent.com/pypi/simple/"
+default = true
