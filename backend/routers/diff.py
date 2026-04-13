@@ -39,10 +39,29 @@ async def get_diff_pair(task_id: int, pair_index: int, db: Session = Depends(get
     if img_a is None and img_b is None:
         raise HTTPException(status_code=404, detail=f"pair_index {pair_index} 不存在")
 
+    # 先按 pair_index 查（正常路径）
     diff_record = diff_service.get_diff_pair(db, task_id, pair_index)
+
+    # 兜底：按 image_a_id + image_b_id 查（pair_index 写错时也能找到）
+    if diff_record is None and img_a and img_b:
+        diff_record = (
+            db.query(DiffResult)
+            .filter(
+                DiffResult.image_a_id == img_a.id,
+                DiffResult.image_b_id == img_b.id,
+            )
+            .first()
+        )
+        # 如果找到了但 pair_index 不对，修正它
+        if diff_record and diff_record.pair_index != pair_index:
+            diff_record.pair_index = pair_index
+            db.commit()
 
     score = diff_record.diff_score if diff_record else None
     is_similar = (score >= SIMILARITY_THRESHOLD) if score is not None else None
+    is_similar_safe = getattr(diff_record, 'is_similar', is_similar) if diff_record else None
+    if is_similar_safe is None:
+        is_similar_safe = is_similar
 
     return DiffPairResult(
         pair_index=pair_index,
@@ -63,7 +82,7 @@ async def get_diff_pair(task_id: int, pair_index: int, db: Session = Depends(get
         ) if img_b else None,
         diff_url=get_public_url(diff_record.diff_oss_key) if diff_record and diff_record.diff_oss_key else None,
         diff_score=score,
-        is_similar=is_similar,
+        is_similar=is_similar_safe,
         align_method=diff_record.align_method if diff_record else None,
         size_warning=diff_record.size_warning if diff_record else False,
     )

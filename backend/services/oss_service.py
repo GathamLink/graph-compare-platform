@@ -99,11 +99,14 @@ def delete_from_oss(oss_key: Optional[str]) -> None:
 
 def get_public_url(oss_key: Optional[str]) -> Optional[str]:
     """
-    拼接公开访问 URL：http://{endpoint}/{bucket}/{oss_key}
+    # 优先读 .env 中的 MINIO_PUBLIC_BASE（公网部署时使用）
+    # 本地开发时不设置此变量，自动降级为 localhost
     """
     if not oss_key:
         return None
-    return f"http://{_endpoint}/{BUCKET}/{oss_key}"
+    public_base = os.getenv("MINIO_PUBLIC_BASE", f"http://{_endpoint}")
+    return f"{public_base}/{BUCKET}/{oss_key}"
+
 
 
 def is_minio_available() -> bool:

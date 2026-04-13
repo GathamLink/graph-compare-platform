@@ -518,6 +518,9 @@ def _run_diff_internal(db: Session, task_id: int) -> None:
 
         if existing:
             diff_record = existing
+            # 修正 pair_index（旧记录可能因算法变更而 pair_index 不正确）
+            if diff_record.pair_index != pair_index:
+                diff_record.pair_index = pair_index
         else:
             diff_record = DiffResult(
                 task_id=task_id,
