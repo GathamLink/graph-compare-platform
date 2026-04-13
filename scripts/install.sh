@@ -357,7 +357,7 @@ install_node() {
         cur_ver=$(node -v 2>/dev/null | sed 's/^v//')  # e.g. 20.18.1
 
         if semver_gte "$cur_ver" "$NODE_MIN_VERSION"; then
-            log_success "Node.js 已安装且满足要求（>= v${NODE_MIN_VERSION}）  →  v$cur_ver"
+            log_success "Node.js 已安装且满足要求>= v${NODE_MIN_VERSION}  →  v$cur_ver"
             return
         fi
 
@@ -368,14 +368,14 @@ install_node() {
         echo ""
         echo -e "  请选择处理方式："
         echo -e "  ${BOLD}[1]${NC} 升级 Node.js 到 v20.19 LTS（推荐，通过 nvm 安装）"
-        echo -e "  ${BOLD}[2]${NC} 保持当前版本 v$cur_ver，尝试以兼容模式安装依赖（--legacy-peer-deps）"
+        echo -e "  ${BOLD}[2]${NC} 保持当前版本 v$cur_ver, 尝试以兼容模式安装依赖 (--legacy-peer-deps)"
         echo ""
         local choice
         read -rp "  请输入选择 [1/2]（默认1）: " choice
         choice="${choice:-1}"
 
         if [[ "$choice" == "2" ]]; then
-            log_warn "保持 Node.js v$cur_ver，将使用 --legacy-peer-deps 安装兼容依赖"
+            log_warn "保持 Node.js v$cur_ver, 将使用 --legacy-peer-deps 安装兼容依赖"
             log_warn "部分功能可能受限，建议后续升级到 v${NODE_MIN_VERSION}+"
             NEED_LEGACY_DEPS=true
             return
