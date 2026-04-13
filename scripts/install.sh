@@ -328,24 +328,51 @@ setup_backend() {
 # 使用 nvm（Node Version Manager）安装 Node.js LTS
 # nvm 安装器：国内用腾讯镜像，失败 fallback 官方
 NVM_DIR_DEFAULT="$HOME/.nvm"
-NODE_VERSION="20"   # LTS 大版本号
+NODE_VERSION="20"       # 目标安装版本（LTS）
+NODE_MIN_MAJOR=18      # 最低要求主版本（Vite 7 / React 19 均要求 >= 18）
+NEED_LEGACY_DEPS=false # 全局标志：node 版本不足时 npm install 改用 --legacy-peer-deps
 
 install_node() {
     log_step 5 "检测并安装 Node.js"
 
     if command -v node &>/dev/null; then
-        local node_ver
-        node_ver=$(node -v 2>/dev/null)
-        log_success "Node.js 已安装，跳过  →  $node_ver"
-        return
+        local cur_ver cur_major
+        cur_ver=$(node -v 2>/dev/null)                          # e.g. v16.20.2
+        cur_major=$(echo "$cur_ver" | sed 's/v//' | cut -d. -f1)  # e.g. 16
+
+        if [[ "$cur_major" -ge "$NODE_MIN_MAJOR" ]]; then
+            log_success "Node.js 已安装且满足要求（>= v${NODE_MIN_MAJOR}）  →  $cur_ver"
+            return
+        fi
+
+        # ── 版本不满足，询问用户 ──────────────────────────────────────────────
+        echo ""
+        log_warn "当前 Node.js 版本 $cur_ver 低于最低要求 v${NODE_MIN_MAJOR}"
+        log_warn "项目依赖（Vite 7 / React 19）要求 Node.js >= v${NODE_MIN_MAJOR}"
+        echo ""
+        echo -e "  请选择处理方式："
+        echo -e "  ${BOLD}[1]${NC} 升级 Node.js 到 v${NODE_VERSION} LTS（推荐，通过 nvm 安装）"
+        echo -e "  ${BOLD}[2]${NC} 保持当前版本 v${cur_major}，尝试安装兼容此版本的最新依赖"
+        echo ""
+        local choice
+        read -rp "  请输入选择 [1/2]（默认1）: " choice
+        choice="${choice:-1}"
+
+        if [[ "$choice" == "2" ]]; then
+            log_warn "保持 Node.js $cur_ver，将使用 --legacy-peer-deps 安装兼容依赖"
+            log_warn "部分功能可能受限，建议后续升级到 v${NODE_MIN_MAJOR}+"
+            NEED_LEGACY_DEPS=true
+            return
+        fi
+
+        log_info "用户选择升级，继续安装 Node.js v${NODE_VERSION} LTS..."
     fi
 
-    log_info "未检测到 Node.js，尝试通过 nvm 安装 Node.js ${NODE_VERSION} LTS..."
+    # ── 通过 nvm 安装目标版本 ──────────────────────────────────────────────────
+    log_info "未检测到满足条件的 Node.js，尝试通过 nvm 安装 Node.js ${NODE_VERSION} LTS..."
 
-    # 1. 安装 nvm（若不存在）
     if [[ ! -s "$NVM_DIR_DEFAULT/nvm.sh" ]]; then
         log_info "正在安装 nvm..."
-        # 腾讯云镜像（gitee）fallback 到官方
         local nvm_install_cn="https://gitee.com/mirrors/nvm/raw/master/install.sh"
         local nvm_install_official="https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh"
         local nvm_tmp="/tmp/nvm-installer-$$.sh"
@@ -355,29 +382,26 @@ install_node() {
         else
             log_warn "gitee 镜像失败，回退到官方源..."
             if ! curl -fsSL --connect-timeout 15 "$nvm_install_official" -o "$nvm_tmp"; then
-                log_error "nvm 下载失败，请手动安装 Node.js >= 18：https://nodejs.org"
-                return 1
+                log_error "nvm 下载失败，请手动安装 Node.js >= ${NODE_MIN_MAJOR}：https://nodejs.org"
+                NEED_LEGACY_DEPS=true   # 已有旧版 node，降级尝试
+                return
             fi
         fi
-
         PROFILE=/dev/null bash "$nvm_tmp" 2>&1 | while IFS= read -r line; do log_detail "$line"; done
         rm -f "$nvm_tmp"
     fi
 
-    # 2. 加载 nvm
     export NVM_DIR="${NVM_DIR:-$NVM_DIR_DEFAULT}"
     # shellcheck source=/dev/null
     [[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh"
 
     if ! command -v nvm &>/dev/null 2>&1; then
-        log_error "nvm 加载失败，请手动安装 Node.js >= 18：https://nodejs.org"
+        log_error "nvm 加载失败，请手动安装 Node.js >= ${NODE_MIN_MAJOR}：https://nodejs.org"
         log_warn "安装完成后重新运行 bash scripts/install.sh"
         return 1
     fi
 
-    # 3. 通过 nvm 安装指定版本 Node.js
-    log_info "正在安装 Node.js ${NODE_VERSION} LTS（通过 nvm）..."
-    # 设置腾讯云 npm 镜像加速 nvm 下载
+    log_info "正在安装 Node.js ${NODE_VERSION} LTS（通过 nvm + 腾讯云镜像）..."
     NVM_NODEJS_ORG_MIRROR="https://mirrors.tencent.com/nodejs-release" \
         nvm install "$NODE_VERSION" 2>&1 | while IFS= read -r line; do log_detail "$line"; done
 
@@ -386,12 +410,12 @@ install_node() {
 
     if command -v node &>/dev/null; then
         log_success "Node.js 安装成功  →  $(node -v)"
-        log_warn "提示：nvm 仅在当前 session 生效，如需永久使用请在 ~/.zshrc 或 ~/.bashrc 中添加："
+        log_warn "提示：nvm 仅在当前 session 生效，如需永久生效请在 ~/.zshrc 或 ~/.bashrc 中添加："
         log_warn "  export NVM_DIR=\"\$HOME/.nvm\""
         log_warn "  [ -s \"\$NVM_DIR/nvm.sh\" ] && source \"\$NVM_DIR/nvm.sh\""
     else
         log_error "Node.js 安装失败，请手动安装：https://nodejs.org"
-        return 1
+        NEED_LEGACY_DEPS=true
     fi
 }
 
@@ -424,17 +448,27 @@ setup_frontend() {
     node_ver=$(node -v 2>/dev/null)
     log_info "Node.js 版本: $node_ver"
     log_info "npm 镜像: $TENCENT_NPM"
+
+    # 根据 NEED_LEGACY_DEPS 标志决定是否加 --legacy-peer-deps
+    local npm_extra_flags=""
+    if [[ "$NEED_LEGACY_DEPS" == "true" ]]; then
+        npm_extra_flags="--legacy-peer-deps"
+        log_warn "当前 Node.js 版本较低，使用 --legacy-peer-deps 安装兼容依赖"
+        log_warn "如遇功能异常，建议升级至 Node.js v${NODE_MIN_MAJOR}+ 后重新执行 bash scripts/install.sh"
+    fi
     echo ""
 
     cd "$frontend_dir"
     # npm install 输出透传（会显示包数量/进度）
-    if ! npm install --registry "$TENCENT_NPM" 2>&1 | while IFS= read -r line; do
+    # shellcheck disable=SC2086
+    if ! npm install --registry "$TENCENT_NPM" $npm_extra_flags 2>&1 | while IFS= read -r line; do
             echo "    $line"
         done
     then
         log_warn "腾讯云镜像失败，回退到官方源..."
         echo ""
-        npm install 2>&1 | while IFS= read -r line; do
+        # shellcheck disable=SC2086
+        npm install $npm_extra_flags 2>&1 | while IFS= read -r line; do
             echo "    $line"
         done
     fi
