@@ -328,44 +328,60 @@ setup_backend() {
 # 使用 nvm（Node Version Manager）安装 Node.js LTS
 # nvm 安装器：国内用腾讯镜像，失败 fallback 官方
 NVM_DIR_DEFAULT="$HOME/.nvm"
-NODE_VERSION="20"       # 目标安装版本（LTS）
-NODE_MIN_MAJOR=18      # 最低要求主版本（Vite 7 / React 19 均要求 >= 18）
+NODE_VERSION="20"       # nvm 安装目标版本（LTS）
+# Vite 7 / @vitejs/plugin-react 5 要求 node ^20.19.0 || >=22.12.0
+# 用"20.19.0"作为 20.x 分支的最低精确版本
+NODE_MIN_VERSION="20.19.0"
 NEED_LEGACY_DEPS=false # 全局标志：node 版本不足时 npm install 改用 --legacy-peer-deps
+
+# 版本比较：semver_gte <a> <b>  ← 若 a >= b 返回 0（true）
+semver_gte() {
+    local a="$1" b="$2"
+    # 按 . 分割，逐段比较
+    local IFS=.
+    local pa=($a) pb=($b)
+    local i
+    for i in 0 1 2; do
+        local va="${pa[$i]:-0}" vb="${pb[$i]:-0}"
+        if (( va > vb )); then return 0; fi
+        if (( va < vb )); then return 1; fi
+    done
+    return 0  # 完全相等也算 >=
+}
 
 install_node() {
     log_step 5 "检测并安装 Node.js"
 
     if command -v node &>/dev/null; then
-        local cur_ver cur_major
-        cur_ver=$(node -v 2>/dev/null)                          # e.g. v16.20.2
-        cur_major=$(echo "$cur_ver" | sed 's/v//' | cut -d. -f1)  # e.g. 16
+        local cur_ver
+        cur_ver=$(node -v 2>/dev/null | sed 's/^v//')  # e.g. 20.18.1
 
-        if [[ "$cur_major" -ge "$NODE_MIN_MAJOR" ]]; then
-            log_success "Node.js 已安装且满足要求（>= v${NODE_MIN_MAJOR}）  →  $cur_ver"
+        if semver_gte "$cur_ver" "$NODE_MIN_VERSION"; then
+            log_success "Node.js 已安装且满足要求（>= v${NODE_MIN_VERSION}）  →  v$cur_ver"
             return
         fi
 
         # ── 版本不满足，询问用户 ──────────────────────────────────────────────
         echo ""
-        log_warn "当前 Node.js 版本 $cur_ver 低于最低要求 v${NODE_MIN_MAJOR}"
-        log_warn "项目依赖（Vite 7 / React 19）要求 Node.js >= v${NODE_MIN_MAJOR}"
+        log_warn "当前 Node.js 版本 v$cur_ver 低于最低要求 v${NODE_MIN_VERSION}"
+        log_warn "项目依赖（Vite 7 / @vitejs/plugin-react 5）要求 Node.js ^20.19.0 || >=22.12.0"
         echo ""
         echo -e "  请选择处理方式："
-        echo -e "  ${BOLD}[1]${NC} 升级 Node.js 到 v${NODE_VERSION} LTS（推荐，通过 nvm 安装）"
-        echo -e "  ${BOLD}[2]${NC} 保持当前版本 v${cur_major}，尝试安装兼容此版本的最新依赖"
+        echo -e "  ${BOLD}[1]${NC} 升级 Node.js 到 v20.19 LTS（推荐，通过 nvm 安装）"
+        echo -e "  ${BOLD}[2]${NC} 保持当前版本 v$cur_ver，尝试以兼容模式安装依赖（--legacy-peer-deps）"
         echo ""
         local choice
         read -rp "  请输入选择 [1/2]（默认1）: " choice
         choice="${choice:-1}"
 
         if [[ "$choice" == "2" ]]; then
-            log_warn "保持 Node.js $cur_ver，将使用 --legacy-peer-deps 安装兼容依赖"
-            log_warn "部分功能可能受限，建议后续升级到 v${NODE_MIN_MAJOR}+"
+            log_warn "保持 Node.js v$cur_ver，将使用 --legacy-peer-deps 安装兼容依赖"
+            log_warn "部分功能可能受限，建议后续升级到 v${NODE_MIN_VERSION}+"
             NEED_LEGACY_DEPS=true
             return
         fi
 
-        log_info "用户选择升级，继续安装 Node.js v${NODE_VERSION} LTS..."
+        log_info "用户选择升级，继续安装 Node.js 20.19 LTS..."
     fi
 
     # ── 通过 nvm 安装目标版本 ──────────────────────────────────────────────────
@@ -449,12 +465,22 @@ setup_frontend() {
     log_info "Node.js 版本: $node_ver"
     log_info "npm 镜像: $TENCENT_NPM"
 
+    # ── 修复 npm cache 权限（常见于 sudo 操作后遗留的 root 文件）──────────────
+    local npm_cache
+    npm_cache=$(npm config get cache 2>/dev/null || echo "$HOME/.npm")
+    if [[ -d "$npm_cache" ]] && find "$npm_cache" -maxdepth 0 -not -user "$(id -u)" 2>/dev/null | grep -q .; then
+        log_warn "检测到 npm 缓存目录存在权限问题，正在修复..."
+        sudo chown -R "$(id -u):$(id -g)" "$npm_cache" 2>/dev/null && \
+            log_success "npm 缓存权限已修复" || \
+            log_warn "权限修复失败（无 sudo 权限），如 npm 安装失败请手动执行：sudo chown -R $(id -u):$(id -g) $npm_cache"
+    fi
+
     # 根据 NEED_LEGACY_DEPS 标志决定是否加 --legacy-peer-deps
     local npm_extra_flags=""
     if [[ "$NEED_LEGACY_DEPS" == "true" ]]; then
         npm_extra_flags="--legacy-peer-deps"
         log_warn "当前 Node.js 版本较低，使用 --legacy-peer-deps 安装兼容依赖"
-        log_warn "如遇功能异常，建议升级至 Node.js v${NODE_MIN_MAJOR}+ 后重新执行 bash scripts/install.sh"
+        log_warn "如遇功能异常，建议升级至 Node.js v${NODE_MIN_VERSION}+ 后重新执行 bash scripts/install.sh"
     fi
     echo ""
 
