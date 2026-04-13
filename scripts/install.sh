@@ -148,8 +148,13 @@ detect_platform() {
 }
 
 # ─── 步骤 1：安装 uv ──────────────────────────────────────────────────────────
-UV_INSTALLER_CN="https://gitee.com/yingyongzhicheng/uv/releases/download/0.6.14/uv-installer.sh"
+# ─── uv 安装方式（三级 fallback）──────────────────────────────────────────────
+# 方案1（首选）：pip install uv，使用腾讯云 PyPI 镜像，国内最稳定
+# 方案2：GitHub releases 官方 installer（302 可达，部分服务器可用）
+# 方案3（最后）：astral.sh 官方（需翻墙或走代理）
+UV_INSTALLER_GITHUB="https://github.com/astral-sh/uv/releases/latest/download/uv-installer.sh"
 UV_INSTALLER_OFFICIAL="https://astral.sh/uv/install.sh"
+TENCENT_PYPI_SIMPLE="https://mirrors.tencent.com/pypi/simple/"
 
 install_uv() {
     log_step 1 "安装 uv（Python 包管理工具）"
@@ -159,34 +164,53 @@ install_uv() {
         return
     fi
 
-    log_info "尝试国内镜像下载 uv 安装脚本..."
-    local installer="/tmp/uv-installer-$$.sh"
-
-    if _curl_download "$UV_INSTALLER_CN" "$installer" "uv-installer.sh（gitee 镜像）" 2>/dev/null; then
-        sh "$installer" 2>&1 | while IFS= read -r line; do
-            log_detail "$line"
-        done
-        rm -f "$installer"
+    # ── 方案1：pip install uv（腾讯云 PyPI，国内最稳定）──────────────────────
+    log_info "尝试方案1：pip install uv（腾讯云 PyPI 镜像）..."
+    if command -v pip3 &>/dev/null || command -v pip &>/dev/null; then
+        local pip_cmd="pip3"
+        command -v pip3 &>/dev/null || pip_cmd="pip"
+        if "$pip_cmd" install uv -i "$TENCENT_PYPI_SIMPLE" --quiet 2>/dev/null; then
+            export PATH="$HOME/.local/bin:$PATH"
+            if command -v uv &>/dev/null; then
+                log_success "uv 安装成功（pip + 腾讯云 PyPI）  →  $(uv --version)"
+                return
+            fi
+        fi
+        log_warn "方案1 失败，尝试方案2..."
     else
-        log_warn "国内镜像失败，回退到官方源..."
-        if _curl_download "$UV_INSTALLER_OFFICIAL" "$installer" "uv-installer.sh（官方）"; then
-            sh "$installer" 2>&1 | while IFS= read -r line; do
-                log_detail "$line"
-            done
-            rm -f "$installer"
-        else
-            log_error "uv 安装失败，请手动安装：https://docs.astral.sh/uv/getting-started/installation/"
-            exit 1
+        log_warn "pip 未找到，跳过方案1，尝试方案2..."
+    fi
+
+    # ── 方案2：GitHub releases 官方 installer ──────────────────────────────────
+    log_info "尝试方案2：GitHub releases installer..."
+    local installer="/tmp/uv-installer-$$.sh"
+    if _curl_download "$UV_INSTALLER_GITHUB" "$installer" "uv-installer.sh（GitHub releases）" 2>/dev/null; then
+        sh "$installer" 2>&1 | while IFS= read -r line; do log_detail "$line"; done
+        rm -f "$installer"
+        export PATH="$HOME/.local/bin:$PATH"
+        if command -v uv &>/dev/null; then
+            log_success "uv 安装成功（GitHub releases）  →  $(uv --version)"
+            return
         fi
     fi
+    log_warn "方案2 失败，尝试方案3（官方，可能需要网络代理）..."
 
-    export PATH="$HOME/.local/bin:$PATH"
-    if command -v uv &>/dev/null; then
-        log_success "uv 安装成功  →  $(uv --version)"
-    else
-        log_error "uv 安装后仍无法找到，请检查 PATH"
-        exit 1
+    # ── 方案3：astral.sh 官方 ──────────────────────────────────────────────────
+    log_info "尝试方案3：astral.sh 官方安装器..."
+    if _curl_download "$UV_INSTALLER_OFFICIAL" "$installer" "uv-installer.sh（官方）"; then
+        sh "$installer" 2>&1 | while IFS= read -r line; do log_detail "$line"; done
+        rm -f "$installer"
+        export PATH="$HOME/.local/bin:$PATH"
+        if command -v uv &>/dev/null; then
+            log_success "uv 安装成功（官方源）  →  $(uv --version)"
+            return
+        fi
     fi
+    rm -f "$installer"
+
+    log_error "三种方式均失败，请手动安装 uv：https://docs.astral.sh/uv/getting-started/installation/"
+    log_error "或执行：pip install uv -i https://mirrors.tencent.com/pypi/simple/"
+    exit 1
 }
 
 # ─── 步骤 2：下载 MinIO 二进制 ────────────────────────────────────────────────
